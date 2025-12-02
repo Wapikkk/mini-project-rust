@@ -1,50 +1,46 @@
-use axum::{routing::get, Json, Router};
-use serde::Serialize;
-use sysinfo::{RefreshKind, System, CpuRefreshKind, MemoryRefreshKind};
-use std::sync::{Arc, Mutex};
-use tokio::net::TcpListener;
-
-#[derive(Serialize)]
-struct ServerStatus {
-    cpu_usage: f32,
-    ram_used_mb: u64,
-    ram_total_mb: u64,
-}
-
-struct AppState {
-    sys: Mutex<System>,
-}
+use axum::{routing::post, Router, http::Method};
+use enigo::{Enigo, Key, Settings, Keyboard, Direction};
+use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() {
-    let sys = System::new_with_specifics(
-        RefreshKind::new()
-            .with_cpu(CpuRefreshKind::everything())
-            .with_memory(MemoryRefreshKind::everything()),
-    );
-
-    let app_state = Arc::new(AppState { sys: Mutex::new(sys) });
-
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST]);
+    
     let app = Router::new()
-        .route("/", get(get_status))
-        .with_state(app_state);
+        .route("/vol_up", post(volume_up))
+        .route("/vol_down", post(volume_down))
+        .route("/vol_mute", post(volume_mute))
+        .route("/play_pause", post(play_pause))
+        .layer(cors);
+    
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    println!("Server Berjalan");
 
-    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("🚀 Server Rust berjalan di http://localhost:3000");
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn get_status(axum::extract::State(state): axum::extract::State<Arc<AppState>>) -> Json<ServerStatus> {
-    let mut sys = state.sys.lock().unwrap();
-    sys.refresh_all();
+async fn volume_up() {
+    println!("Volume Naik");
+    let mut enigo = Enigo::new(&Settings::default()).unwrap();
+    let _ = enigo.key(Key::VolumeUp, Direction::Click);
+}
 
-    let cpu = sys.global_cpu_info().cpu_usage();
-    let used = sys.used_memory() / 1024 / 1024;
-    let total = sys.total_memory() / 1024 / 1024;
+async fn volume_down() {
+    println!("Volume Diturunkan");
+    let mut enigo = Enigo::new(&Settings::default()).unwrap();
+    let _ = enigo.key(Key::VolumeDown, Direction::Click);
+}
 
-    Json(ServerStatus {
-        cpu_usage: cpu,
-        ram_used_mb: used,
-        ram_total_mb: total,
-    })
+async fn volume_mute() {
+    println!("Volume Dimatikan");
+    let mut enigo = Enigo::new(&Settings::default()).unwrap();
+    let _ = enigo.key(Key::VolumeMute, Direction::Click);
+}
+
+async fn play_pause() {
+    println!("Tombol Ditekan");
+    let mut enigo = Enigo::new(&Settings::default()).unwrap();
+    let _ = enigo.key(Key::MediaPlayPause, Direction::Click);
 }
